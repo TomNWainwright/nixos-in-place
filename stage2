@@ -5,37 +5,8 @@ set -eu
 root_mount=$1
 root_type=$2
 grub_device=$3
-digitalocean=$4
-digitalocean_configs=""
 
-if [ "$digitalocean" = "true" ];
-then
-  digitalocean_configs="
-    ## Digital Ocean networking setup; manage interfaces manually
-    networking.useDHCP = false;
 
-    systemd.services.setup-network = {
-      wantedBy = [ \"multi-user.target\" ];
-      after = [ \"network-pre.target\" ];
-      path = [ pkgs.gawk pkgs.iproute pkgs.openresolv ];
-      serviceConfig = {
-        ExecStart = \"\${pkgs.bash}/bin/bash /etc/nixos-in-place/setup-network\";
-      };
-    };
-  "
-  mkdir -p /nixos/etc/nixos-in-place
-  cp /nixos-in-place/setup-network /nixos/etc/nixos-in-place/
-
-  ## Not a valid link now, but this will represent the file which DO will
-  ## update each boot.
-  mkdir -p /nixos/etc/network
-  ln -sf /old-root/etc/network/interfaces /nixos/etc/network/
-
-  ## Use the original authorized_keys that DO added
-  mkdir -pm 711 /root/
-  mkdir -pm 700 /root/.ssh/
-  ln -sf /old-root/root/.ssh/authorized_keys /root/.ssh/authorized_keys
-fi
 
 ## Enable host resolution
 cp /etc/external-resolv.conf /etc/resolv.conf
@@ -48,9 +19,28 @@ nix-env -i pcre
 nixos-generate-config --root /nixos
 
 cat <<EOF > /nixos/etc/nixos/nixos-in-place.nix
+
 { config, pkgs, ... }:
 {
   ## Everything below is generated from nixos-in-place; modify with caution!
+  
+
+  networking.hostName = "nixos"; # Define your hostname.
+  networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
+  i18n = {
+     consoleFont = "Lat2-Terminus16";
+     consoleKeyMap = "us";
+     defaultLocale = "en_GB.UTF-8";
+  };
+  time.timeZone = "Europe/London";
+   environment.systemPackages = with pkgs; [
+     wget vim curl kakoune chromium wmctrl xdotool kate git 
+  ];
+  sound.enable = true;
+  hardware.pulseaudio.enable = true;
+  services.xserver.libinput.enable = true;
+  services.xserver.displayManager.sddm.enable = true;
+  services.xserver.desktopManager.plasma5.enable = true;
   boot.kernelParams = ["boot.shell_on_fail"];
   boot.loader.grub.device = "$grub_device";
   boot.loader.grub.storePath = "/nixos/nix/store";
@@ -71,7 +61,6 @@ cat <<EOF > /nixos/etc/nixos/nixos-in-place.nix
     };
   };
   users.extraUsers.root.password = "nixos";
-  $digitalocean_configs
   $(cat /nixos/extra-config)
 }
 EOF
@@ -91,3 +80,8 @@ pcregrep -Mv "fileSystems.\"/\"[\s\S]*};" $nixos_dir/backup-hardware-configurati
 ## Installs grub and a base NixOS system; after a reboot, we're golden
 NIXOS_INSTALL_REEXEC=1 nixos-install --root /nixos --show-trace --no-root-passwd
 exit
+
+
+
+
+
